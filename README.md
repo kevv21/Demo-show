@@ -1,6 +1,6 @@
 # Quincena
 
-App web (instalable en el teléfono) para llevar tus finanzas por **quincena**: tu salario, tus gastos fijos, sobres por categoría y ahorro. Sin cuentas, sin servidor y sin conectar tu banco: los datos viven en tu dispositivo.
+App web (instalable en el teléfono) para llevar tus finanzas por **quincena**: tu salario, tus gastos fijos, sobres por categoría y ahorro. Pensada para Nicaragua: trabaja en **córdobas (C$)** y acepta montos en **dólares (US$)** con el tipo de cambio que definas. Sin cuentas, sin servidor y sin conectar tu banco: los datos viven en tu dispositivo.
 
 ![Inicio](design/screens/inicio.png)
 
@@ -11,7 +11,8 @@ La pregunta diaria: **"¿cuánto me queda para gastar hasta que me vuelvan a pag
 - **Te queda para gastar** = ingreso de la quincena, menos ahorro, menos los gastos fijos que le tocan, menos lo que ya gastaste. Y cuánto te toca **por día** con los días que faltan.
 - **Gastos fijos asignados a la quincena correcta.** Si te pagan el 15 y el último día, una renta que vence el día 1 sale del pago del último día del mes anterior (no del 15, como dicen muchas guías).
 - **Sobres por categoría** (súper, transporte, salidas, gastos hormiga...) con una raya que marca qué tan avanzada va la quincena, para ver si vas rápido.
-- **Gastos no mensuales** (luz bimestral, seguro anual, predial): puedes **apartar** una parte cada quincena.
+- **Córdobas y dólares:** si tu alquiler, un préstamo o una suscripción están en dólares, los registras en US$ y la app los convierte a córdobas con el tipo de cambio (viene con el oficial del BCN y lo puedes cambiar). Las remesas en dólares también.
+- **Gastos no mensuales** (matrícula escolar, seguro del vehículo, regalos de diciembre): puedes **apartar** una parte cada quincena.
 - **Reportes:** regla 50/30/20 real contra meta, en qué se fue el dinero, gastos hormiga proyectados al año y tendencia de las últimas 6 quincenas.
 
 ## Pantallas
@@ -24,10 +25,11 @@ Hay versión en modo oscuro de cada una en `design/screens/`.
 
 ## Cómo usarla
 
-1. **Bienvenida (1 minuto):** cuánto recibes neto por quincena, qué días te pagan, si te adelantan el pago cuando cae en fin de semana, cuánto quieres ahorrar y tu moneda.
-2. **Fijos:** agrega renta, luz, internet, celular, etc. Toca una sugerencia para hacerlo más rápido. Indica frecuencia y día de vencimiento.
+1. **Bienvenida (1 minuto):** tu moneda (córdoba por defecto), cuánto recibes neto por quincena (después de INSS e IR), qué días te pagan, si te adelantan el pago cuando cae en fin de semana y cuánto quieres ahorrar.
+2. **Fijos:** agrega alquiler, luz, agua, internet y cable, celular, etc. Toca una sugerencia para hacerlo más rápido. Indica frecuencia, día de vencimiento y si es en C$ o US$.
 3. **Sobres:** en Ajustes, ponle un monto por quincena a las categorías que quieras limitar.
-4. **Día a día:** botón **+ Gasto**, escribe el monto, toca la categoría, guarda. Marca los fijos como pagados cuando los pagues (puedes anotar el monto real si varió).
+4. **Día a día:** botón **+ Gasto**, escribe el monto (en C$ o US$), toca la categoría, guarda. Marca los fijos como pagados cuando los pagues (puedes anotar el monto real si varió).
+5. **Tipo de cambio:** en Ajustes. Si pagas con tarjeta, tu banco puede cobrar un poco más que el oficial; pon el de tu banco si quieres más precisión.
 
 Para probar sin capturar nada: abre la app con `?demo=1` (usa datos separados de los tuyos).
 
@@ -52,6 +54,8 @@ Funciona sin internet después de la primera visita.
 - No se conecta al banco: depende de que registres tus gastos. Si dejas de capturar, deja de servir.
 - No sincroniza entre dispositivos (usa el respaldo).
 - Las compras con tarjeta de crédito cuentan en la quincena en que las haces, no en la fecha de corte.
+- Un gasto en dólares se convierte con el tipo de cambio del momento en que lo registras; un fijo en dólares se recalcula si cambias el tipo de cambio.
+- Si ya habías configurado la app con otra moneda, cámbiala en Ajustes → Moneda: los montos guardados no se convierten.
 
 ## Desarrollo
 

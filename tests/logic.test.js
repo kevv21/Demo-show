@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   periodFor, periodByKey, shiftPeriod, payDatesForMonth, billDueDatesInPeriod, billsForPeriod,
   summarize, parseAmount, periodRange, fixedLoadByPayDay, spreadPerPeriod, toCSV,
+  billAmount, fromUSD, makeFormatter, DEFAULT_USD_RATE,
 } from '../src/logic.js';
+import { normalize, defaultState, demoState } from '../src/store.js';
 
 const S = { payDays: [15, 'last'], weekendRule: 'none', billBufferDays: 0, netPay: 1000000, savings: { type: 'percent', value: 10 } };
 
@@ -152,16 +154,101 @@ test('parseAmount entiende formatos comunes', () => {
   assert.equal(parseAmount('abc'), null);
 });
 
-test('CSV escapa comas y comillas', () => {
-  const csv = toCSV({ categories: [{ id: 'c', name: 'Súper' }], expenses: [{ date: '2026-10-16', categoryId: 'c', amount: 12345, note: 'leche, "pan"' }], incomes: [] });
-  assert.equal(csv.split('\n')[1], '2026-10-16,gasto,Súper,123.45,"leche, ""pan"""');
+test('CSV escapa comas y comillas e incluye columna en dólares', () => {
+  const csv = toCSV({
+    settings: { currency: 'NIO' },
+    categories: [{ id: 'c', name: 'Súper' }],
+    expenses: [
+      { date: '2026-10-16', categoryId: 'c', amount: 12345, note: 'leche, "pan"' },
+      { date: '2026-10-17', categoryId: 'c', amount: 36624, usd: 1000, note: 'Netflix' },
+    ],
+    incomes: [],
+  });
+  const lines = csv.split('\n');
+  assert.equal(lines[0], 'fecha,tipo,categoria,monto_nio,monto_usd,nota');
+  assert.equal(lines[1], '2026-10-16,gasto,Súper,123.45,,"leche, ""pan"""');
+  assert.equal(lines[2], '2026-10-17,gasto,Súper,366.24,10.00,Netflix');
 });
 
 test('formato de dinero: decimales solo si hay centavos', () => {
-  const { makeFormatter } = { makeFormatter: (c) => import('../src/logic.js').then((m) => m.makeFormatter(c)) };
-  return makeFormatter('MXN').then((f) => {
-    assert.equal(f.money(8550), '$85.50');
-    assert.equal(f.money(120000), '$1,200');
-    assert.equal(f.round(120049), '$1,200');
+  const f = makeFormatter('MXN');
+  assert.equal(f.money(8550), '$85.50');
+  assert.equal(f.money(120000), '$1,200');
+  assert.equal(f.round(120049), '$1,200');
+});
+
+test('córdobas se muestran con C$ y dólares con US$', () => {
+  const f = makeFormatter('NIO');
+  assert.equal(f.money(125050), 'C$1,250.50');
+  assert.equal(f.money(1200000), 'C$12,000');
+  assert.equal(f.round(1099999), 'C$11,000');
+  assert.equal(f.usd(25000), 'US$250');
+  assert.equal(f.usd(999), 'US$9.99');
+  // Otras monedas de la región mantienen su símbolo local, no el código ISO.
+  assert.match(makeFormatter('CRC').round(100000), /₡/);
+  assert.match(makeFormatter('HNL').round(100000), /^L/);
+});
+
+test('fijo en dólares se convierte con el tipo de cambio vigente', () => {
+  const settings = { ...S, currency: 'NIO', usdRate: 36.6243 };
+  const alquiler = { id: 'a', amount: 0, usd: 25000, dueDay: 1, every: 1 };
+  assert.equal(fromUSD(25000, 36.6243), 915608);
+  assert.equal(billAmount(alquiler, settings), 915608);
+  // Si cambia el tipo de cambio, el monto local se recalcula.
+  assert.equal(billAmount(alquiler, { ...settings, usdRate: 37 }), 925000);
+  // Si la moneda local ya es el dólar, se usa tal cual.
+  assert.equal(billAmount(alquiler, { ...settings, currency: 'USD' }), 25000);
+  // Fijo normal en córdobas no se toca.
+  assert.equal(billAmount({ amount: 110000 }, settings), 110000);
+  const state = { settings, bills: [alquiler], billStatus: {}, categories: [], expenses: [], incomes: [] };
+  const p = periodByKey('2026-10-2', settings); // 31 oct al 14 nov: le toca el día 1
+  assert.equal(billsForPeriod(state, p)[0].amount, 915608);
+  assert.equal(summarize(state, p, '2026-11-02').fixedTotal, 915608);
+});
+
+test('apartar un fijo anual en dólares usa el monto convertido', () => {
+  const settings = { ...S, currency: 'NIO', usdRate: 36.6243 };
+  const seguro = { id: 's', amount: 0, usd: 48000, dueDay: 10, every: 12, anchorMonth: 3, spread: true };
+  assert.equal(spreadPerPeriod(seguro, settings), Math.round(fromUSD(48000, 36.6243) / 24));
+});
+
+test('estado inicial en córdobas con tipo de cambio oficial', () => {
+  const st = defaultState();
+  assert.equal(st.settings.currency, 'NIO');
+  assert.equal(st.settings.usdRate, DEFAULT_USD_RATE.NIO);
+});
+
+test('normalize: moneda desconocida pasa a córdobas; otra moneda sin tasa queda sin configurar', () => {
+  assert.equal(normalize({ settings: { currency: 'XXX' } }).settings.currency, 'NIO');
+  const crc = normalize({ settings: { currency: 'CRC' } }).settings;
+  assert.equal(crc.currency, 'CRC');
+  assert.equal(crc.usdRate, null);
+  assert.equal(normalize({ settings: { currency: 'NIO', usdRate: '37.1' } }).settings.usdRate, 37.1);
+  assert.equal(normalize({ settings: { currency: 'NIO', usdRate: -5 } }).settings.usdRate, DEFAULT_USD_RATE.NIO);
+});
+
+test('normalize conserva montos en dólares y los deja en null si no vienen', () => {
+  const st = normalize({
+    settings: { currency: 'NIO' },
+    bills: [
+      { id: 'a', name: 'Alquiler', amount: 915608, usd: 25000, dueDay: 1, every: 1 },
+      { id: 'b', name: 'Luz', amount: 110000, dueDay: 20, every: 1 },
+    ],
+    expenses: [
+      { id: 'e', amount: 36624, usd: 1000, date: '2026-10-16', categoryId: 'otros' },
+      { id: 'f', amount: 5000, date: '2026-10-16', categoryId: 'otros' },
+    ],
   });
+  assert.equal(st.bills[0].usd, 25000);
+  assert.equal(st.bills[1].usd, null);
+  assert.equal(st.expenses[0].usd, 1000);
+  assert.equal(st.expenses[1].usd, null);
+});
+
+test('la demo está en córdobas y su plan cuadra', () => {
+  const st = demoState('2026-10-14');
+  assert.equal(st.settings.currency, 'NIO');
+  const s = summarize(st, periodFor('2026-10-14', st.settings), '2026-10-14');
+  assert.ok(s.income > 0 && s.fixedTotal > 0 && s.spentTotal > 0);
+  assert.ok(st.bills.some((b) => b.usd != null), 'al menos un fijo en dólares');
 });

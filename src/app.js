@@ -16,6 +16,12 @@ const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (c) => fmt.money(c);
 const round = (c) => fmt.round(c);
+const usd = (c) => fmt.usd(c);
+// Símbolo de la moneda local tal como lo muestra el formato del país (C$, $, Q, ₡...).
+const symbolOf = (code) => L.makeFormatter(code).round(0).replace(/[\d\s.,-]/g, '');
+const localSymbol = () => symbolOf(state.settings.currency);
+const currencyInfo = () => L.MONEDAS.find((m) => m.code === state.settings.currency) || L.MONEDAS[0];
+const billLocal = (bill) => L.billAmount(bill, state.settings);
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const today = () => L.todayISO();
 const catById = (id) => state.categories.find((c) => c.id === id) || state.categories.find((c) => c.id === 'otros');
@@ -128,7 +134,7 @@ function expenseRow(e) {
   const c = catById(e.categoryId);
   return `<button class="row" data-action="edit-expense" data-id="${esc(e.id)}">
     <span class="emoji" style="--c:${c.color}">${esc(c.emoji)}</span>
-    <span class="row-main"><span class="row-title">${esc(e.note || c.name)}</span><span class="row-sub">${esc(e.note ? c.name : dayLabel(e.date))}</span></span>
+    <span class="row-main"><span class="row-title">${esc(e.note || c.name)}</span><span class="row-sub">${esc(e.note ? c.name : dayLabel(e.date))}${e.usd != null ? ` · ${usd(e.usd)}` : ''}</span></span>
     <span class="row-amount">−${money(e.amount)}</span>
   </button>`;
 }
@@ -136,7 +142,7 @@ function expenseRow(e) {
 function incomeRow(i) {
   return `<button class="row" data-action="edit-income" data-id="${esc(i.id)}">
     <span class="emoji" style="--c:#1F8A5B">💰</span>
-    <span class="row-main"><span class="row-title">${esc(i.note || 'Ingreso extra')}</span><span class="row-sub">Ingreso extra</span></span>
+    <span class="row-main"><span class="row-title">${esc(i.note || 'Ingreso extra')}</span><span class="row-sub">Ingreso extra${i.usd != null ? ` · ${usd(i.usd)}` : ''}</span></span>
     <span class="row-amount pos">+${money(i.amount)}</span>
   </button>`;
 }
@@ -145,8 +151,8 @@ function billRow(b, period) {
   const overdue = !b.paid && b.kind === 'pago' && b.date < today();
   const sub =
     b.kind === 'apartado'
-      ? `Apartar para ${L.frecuenciaLabel(b.bill.every).toLowerCase()} de ${money(b.bill.amount)}${b.dueInPeriod ? ' · vence esta quincena' : ''}`
-      : `${overdue ? 'Venció' : 'Vence'} ${dayLabel(b.date).toLowerCase()}${b.amount !== b.estimated ? ` · estimado ${money(b.estimated)}` : ''}`;
+      ? `Apartar para ${L.frecuenciaLabel(b.bill.every).toLowerCase()} de ${b.bill.usd != null ? usd(b.bill.usd) : money(billLocal(b.bill))}${b.dueInPeriod ? ' · vence esta quincena' : ''}`
+      : `${overdue ? 'Venció' : 'Vence'} ${dayLabel(b.date).toLowerCase()}${b.bill.usd != null ? ` · ${usd(b.bill.usd)}` : ''}${b.amount !== b.estimated ? ` · estimado ${money(b.estimated)}` : ''}`;
   return `<div class="row bill ${b.paid ? 'is-paid' : ''} ${overdue ? 'is-overdue' : ''}">
     <button class="check ${b.paid ? 'on' : ''}" data-action="toggle-bill" data-id="${esc(b.bill.id)}" data-period="${esc(period.key)}" aria-pressed="${b.paid}" aria-label="${b.paid ? 'Marcar como pendiente' : b.kind === 'apartado' ? 'Marcar como apartado' : 'Marcar como pagado'}">${icon('check')}</button>
     <span class="row-main"><span class="row-title">${esc(b.bill.name)}</span><span class="row-sub">${esc(sub)}</span></span>
@@ -188,8 +194,11 @@ function viewOnboarding() {
     <h1>Organiza tu dinero por quincena</h1>
     <p class="muted">Un minuto y listo. Todo se guarda solo en este dispositivo.</p>
     <form data-form="onboarding" class="card form">
-      <label>¿Cuánto recibes cada quincena? <small>Neto, lo que llega a tu cuenta</small>
-        <input name="netPay" inputmode="decimal" placeholder="$0" required autocomplete="off" value="${s.netPay ? (s.netPay / 100).toFixed(2) : ''}">
+      <label>Moneda
+        <select name="currency">${currencyOptions(s.currency)}</select>
+      </label>
+      <label>¿Cuánto recibes cada quincena? <small>Neto: lo que llega a tu cuenta después de INSS e IR</small>
+        <input name="netPay" inputmode="decimal" placeholder="${esc(localSymbol())}0" required autocomplete="off" value="${s.netPay ? (s.netPay / 100).toFixed(2) : ''}">
       </label>
       <div class="two">
         <label>Primer pago<select name="pay1">${opts1}</select></label>
@@ -207,9 +216,6 @@ function viewOnboarding() {
           .map((v) => `<label class="chip"><input type="radio" name="savings" value="${v}" ${v === 10 ? 'checked' : ''}><span>${v}%</span></label>`)
           .join('')}</div>
       </fieldset>
-      <label>Moneda
-        <select name="currency">${currencyOptions(s.currency)}</select>
-      </label>
       <button class="btn primary" type="submit">Empezar</button>
     </form>
     <a class="link center" href="?demo=1">Ver una demo con datos de ejemplo</a>
@@ -217,9 +223,7 @@ function viewOnboarding() {
 }
 
 function currencyOptions(sel) {
-  return ['MXN', 'COP', 'USD', 'GTQ', 'HNL', 'CRC', 'DOP', 'PEN', 'CLP', 'ARS', 'EUR']
-    .map((c) => `<option ${c === sel ? 'selected' : ''}>${c}</option>`)
-    .join('');
+  return L.MONEDAS.map((m) => `<option value="${m.code}" ${m.code === sel ? 'selected' : ''}>${m.name} (${esc(symbolOf(m.code))})</option>`).join('');
 }
 
 function viewInicio() {
@@ -354,7 +358,7 @@ function viewFijos() {
   const bills = [...state.bills].sort((a, b) => b.amount - a.amount);
   const which = (bill) => {
     if (bill.every === 0) return 'Cada quincena';
-    if (L.isSpread(bill)) return `Apartas ${money(L.spreadPerPeriod(bill))} cada quincena`;
+    if (L.isSpread(bill)) return `Apartas ${money(L.spreadPerPeriod(bill, state.settings))} cada quincena`;
     // Primera quincena (desde la actual) a la que le toca este fijo.
     let p = L.periodFor(today(), state.settings);
     for (let i = 0; i < 26; i++) {
@@ -394,31 +398,33 @@ function viewFijos() {
                 return `<button class="row" data-action="edit-bill" data-id="${esc(b.id)}">
             <span class="emoji" style="--c:${c.color}">${esc(c.emoji)}</span>
             <span class="row-main"><span class="row-title">${esc(b.name)}${b.active ? '' : ' <em class="tag">pausado</em>'}</span>
-              <span class="row-sub">${esc(L.frecuenciaLabel(b.every))}${b.every === 0 ? '' : ` · vence ${esc(dueLabel(b.dueDay))}`}</span>
+              <span class="row-sub">${esc(L.frecuenciaLabel(b.every))}${b.every === 0 ? '' : ` · vence ${esc(dueLabel(b.dueDay))}`}${b.usd != null ? ` · ${usd(b.usd)}` : ''}</span>
               <span class="row-sub accent">${esc(which(b))}</span></span>
-            <span class="row-amount">${money(b.amount)}</span>
+            <span class="row-amount">${money(billLocal(b))}</span>
           </button>`;
               })
               .join('')
           : `<div class="empty-block"><p class="empty">Toca una sugerencia para agregarla, o crea uno desde cero.</p>
           <div class="chips wrap">${[
-            ['Renta', 'vivienda', 1, 1],
-            ['Luz (CFE)', 'servicios', 20, 2],
-            ['Agua', 'servicios', 10, 2],
-            ['Gas', 'servicios', 25, 1],
-            ['Internet', 'servicios', 10, 1],
-            ['Celular', 'servicios', 22, 1],
+            ['Alquiler', 'vivienda', 1, 1],
+            ['Luz', 'servicios', 20, 1],
+            ['Agua', 'servicios', 18, 1],
+            ['Internet y cable', 'servicios', 10, 1],
+            ['Plan de celular', 'servicios', 22, 1],
             ['Streaming', 'suscripciones', 18, 1],
-            ['Gimnasio', 'salud', 1, 1],
+            ['Colegiatura', 'educacion', 5, 1],
+            ['Préstamo', 'deudas', 15, 1],
             ['Tarjeta de crédito', 'deudas', 20, 1],
-            ['Seguro del auto', 'transporte', 15, 12],
+            ['Gimnasio', 'salud', 1, 1],
+            ['Matrícula escolar', 'educacion', 15, 12],
+            ['Seguro del vehículo', 'transporte', 15, 12],
           ]
             .map(([n, c, d, e]) => `<button class="chip" data-action="new-bill" data-name="${esc(n)}" data-cat="${c}" data-day="${d}" data-every="${e}">+ ${esc(n)}</button>`)
             .join('')}</div></div>`
       }
     </section>
     <button class="btn primary" data-action="new-bill">+ Agregar gasto fijo</button>
-    <p class="small muted">Tip: los gastos que no son mensuales (luz bimestral, seguro anual, predial) conviene <strong>apartarlos</strong> cada quincena para que no te tomen por sorpresa.</p>
+    <p class="small muted">Tip: los gastos que no son mensuales (matrícula escolar, seguro del vehículo, regalos de diciembre) conviene <strong>apartarlos</strong> cada quincena para que no te tomen por sorpresa. Si un fijo lo pactaste en dólares, regístralo en US$ y la app lo convierte.</p>
   </main>
   ${nav('fijos')}`;
 }
@@ -549,6 +555,12 @@ function viewAjustes() {
       <div class="card-head"><h2>Preferencias</h2></div>
       <form data-form="prefs" class="form">
         <label>Moneda<select name="currency" data-autosave>${currencyOptions(s.currency)}</select></label>
+        ${
+          L.usesUSD(s)
+            ? `<label>Tipo de cambio: ${esc(localSymbol())} por US$1 <small>Se usa para gastos y fijos en dólares (alquiler, préstamos, suscripciones).${s.currency === 'NIO' ? ' Viene con el oficial del BCN; si pagas con tarjeta, tu banco puede cobrar un poco más.' : ''}</small>
+          <input name="usdRate" inputmode="decimal" data-autosave value="${s.usdRate ? s.usdRate : ''}" placeholder="Sin configurar"></label>`
+            : ''
+        }
         <label>Pagar los fijos con margen de
           <select name="billBufferDays" data-autosave>${[0, 1, 2, 3, 5]
             .map((d) => `<option value="${d}" ${d === s.billBufferDays ? 'selected' : ''}>${d === 0 ? 'Sin margen (el mismo día del vencimiento)' : `${d} ${d === 1 ? 'día' : 'días'} antes del vencimiento`}</option>`)
@@ -579,6 +591,7 @@ function openSheet(html) {
   if (!$sheet.open) $sheet.showModal();
   const first = $sheet.querySelector('[autofocus]');
   if (first) setTimeout(() => first.focus(), 30);
+  syncFx();
 }
 function closeSheet() {
   if ($sheet.open) $sheet.close();
@@ -591,13 +604,65 @@ function usageOrder() {
   return [...state.categories].sort((a, b) => (count[b.id] || 0) - (count[a.id] || 0));
 }
 
+// Campo de monto con selector de moneda local o dólares (si la moneda local no es el dólar).
+function amountField({ cents = 0, usdCents = null, cls = 'amount-input', autofocus = true, label = 'Monto' } = {}) {
+  const canUSD = L.usesUSD(state.settings);
+  const isUSD = canUSD && usdCents != null;
+  const val = isUSD ? (usdCents / 100).toFixed(2) : cents ? (cents / 100).toFixed(2) : '';
+  return `${
+    canUSD
+      ? `<div class="segmented cur-toggle" role="radiogroup" aria-label="Moneda del monto">
+      <label><input type="radio" name="cur" value="local" ${isUSD ? '' : 'checked'}><span>${esc(localSymbol())} ${esc(currencyInfo().plural)}</span></label>
+      <label><input type="radio" name="cur" value="usd" ${isUSD ? 'checked' : ''}><span>US$ dólares</span></label>
+    </div>`
+      : ''
+  }
+    <input class="${cls}" name="amount" data-amount inputmode="decimal" placeholder="${isUSD ? 'US$0' : `${esc(localSymbol())}0`}" aria-label="${label}" autocomplete="off" required ${autofocus ? 'autofocus' : ''} value="${val}">
+    ${canUSD ? '<p class="fx-preview" data-fx-preview aria-live="polite"></p>' : ''}`;
+}
+
+// Muestra la conversión a moneda local mientras se escribe un monto en dólares.
+function syncFx() {
+  const form = $sheet.querySelector('form');
+  const out = form && form.querySelector('[data-fx-preview]');
+  if (!out) return;
+  const isUSD = form.elements.cur && form.elements.cur.value === 'usd';
+  const input = form.elements.amount;
+  input.placeholder = isUSD ? 'US$0' : `${localSymbol()}0`;
+  if (!isUSD) {
+    out.textContent = '';
+    return;
+  }
+  const rate = state.settings.usdRate;
+  const v = L.parseAmount(input.value);
+  if (!rate) out.textContent = 'Configura el tipo de cambio en Ajustes para usar dólares.';
+  else out.textContent = `${v ? `= ${money(L.fromUSD(v, rate))}` : 'Se convierte'} al cambio de ${localSymbol()}${rate} por US$1`;
+}
+
+// Lee el monto del formulario: si viene en dólares lo convierte y guarda también el original.
+function readMoney(form) {
+  const v = readAmount(form);
+  if (v == null) return null;
+  const isUSD = form.elements.cur && form.elements.cur.value === 'usd';
+  if (!isUSD) return { amount: v, usd: null };
+  const rate = state.settings.usdRate;
+  if (!rate) {
+    const input = form.elements.amount;
+    input.setCustomValidity('Configura el tipo de cambio en Ajustes para usar dólares');
+    input.reportValidity();
+    input.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+    return null;
+  }
+  return { amount: L.fromUSD(v, rate), usd: v };
+}
+
 function sheetExpense(e) {
   const cats = usageOrder();
   const sel = e ? e.categoryId : ui.filter !== 'todas' ? ui.filter : cats[0].id;
   openSheet(`
     <h2>${e ? 'Editar gasto' : 'Nuevo gasto'}</h2>
     <form data-form="expense" class="form" data-id="${e ? esc(e.id) : ''}">
-      <input class="amount-input" name="amount" inputmode="decimal" placeholder="$0" aria-label="Monto" autocomplete="off" required autofocus value="${e ? (e.amount / 100).toFixed(2) : ''}">
+      ${amountField({ cents: e ? e.amount : 0, usdCents: e ? e.usd : null })}
       <fieldset><legend class="sr-only">Categoría</legend>
         <div class="cat-grid">${cats
           .map(
@@ -605,7 +670,7 @@ function sheetExpense(e) {
           )
           .join('')}</div>
       </fieldset>
-      <input name="note" placeholder="Nota (opcional): tacos, gasolina..." maxlength="80" value="${e ? esc(e.note) : ''}">
+      <input name="note" placeholder="Nota (opcional): fritanga, taxi, pulpería..." maxlength="80" value="${e ? esc(e.note) : ''}">
       <input type="date" name="date" value="${e ? e.date : today()}" required aria-label="Fecha">
       <button class="btn primary" type="submit">${e ? 'Guardar cambios' : 'Guardar gasto'}</button>
       ${e ? `<button class="btn danger ghost" type="button" data-action="delete-expense" data-id="${esc(e.id)}">Eliminar</button>` : ''}
@@ -615,10 +680,10 @@ function sheetExpense(e) {
 function sheetIncome(i) {
   openSheet(`
     <h2>${i ? 'Editar ingreso extra' : 'Ingreso extra'}</h2>
-    <p class="muted small">Bonos, aguinaldo, ventas, reembolsos. Suma al disponible de la quincena en que llega.</p>
+    <p class="muted small">Treceavo mes, remesas, bonos, ventas, reembolsos. Si llega en dólares elige US$. Suma al disponible de la quincena en que llega.</p>
     <form data-form="income" class="form" data-id="${i ? esc(i.id) : ''}">
-      <input class="amount-input pos" name="amount" inputmode="decimal" placeholder="$0" aria-label="Monto" required autofocus autocomplete="off" value="${i ? (i.amount / 100).toFixed(2) : ''}">
-      <input name="note" placeholder="Concepto: aguinaldo, venta..." maxlength="80" value="${i ? esc(i.note) : ''}">
+      ${amountField({ cents: i ? i.amount : 0, usdCents: i ? i.usd : null, cls: 'amount-input pos' })}
+      <input name="note" placeholder="Concepto: remesa, treceavo, venta..." maxlength="80" value="${i ? esc(i.note) : ''}">
       <input type="date" name="date" value="${i ? i.date : today()}" required aria-label="Fecha">
       <button class="btn primary" type="submit">Guardar</button>
       ${i ? `<button class="btn danger ghost" type="button" data-action="delete-income" data-id="${esc(i.id)}">Eliminar</button>` : ''}
@@ -640,8 +705,10 @@ function sheetBill(b, preset = {}) {
   openSheet(`
     <h2>${b ? 'Editar gasto fijo' : 'Nuevo gasto fijo'}</h2>
     <form data-form="bill" class="form" data-id="${b ? esc(b.id) : ''}">
-      <label>Nombre<input name="name" required maxlength="40" value="${esc(v.name)}" placeholder="Renta, luz, internet..." ${v.name ? '' : 'autofocus'}></label>
-      <label>Monto <small>Si varía (como la luz), pon un promedio; al pagar puedes anotar el real.</small><input name="amount" inputmode="decimal" required placeholder="$0" autocomplete="off" value="${v.amount ? (v.amount / 100).toFixed(2) : ''}" ${v.name ? 'autofocus' : ''}></label>
+      <label>Nombre<input name="name" required maxlength="40" value="${esc(v.name)}" placeholder="Alquiler, luz, internet..." ${v.name ? '' : 'autofocus'}></label>
+      <fieldset><legend>Monto <small>Si varía (como la luz), pon un promedio; al pagar puedes anotar el real. Si lo pactaste en dólares (alquiler, préstamo), elige US$ y se convierte solo.</small></legend>
+        ${amountField({ cents: v.amount, usdCents: v.usd ?? null, cls: '', autofocus: !!v.name })}
+      </fieldset>
       <div class="two">
         <label>Frecuencia<select name="every" data-toggle-every>${L.FRECUENCIAS.map((f) => `<option value="${f.every}" ${f.every === v.every ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label>
         <label data-when-every="monthly">Vence el<select name="dueDay">${days.map((d) => `<option value="${d}" ${d === v.dueDay ? 'selected' : ''}>${d === 'last' ? 'Último día' : `Día ${d}`}</option>`).join('')}</select></label>
@@ -675,7 +742,7 @@ function sheetCategory(c) {
         <label>Emoji<input name="emoji" maxlength="4" value="${esc(v.emoji)}" class="center"></label>
         <label>Nombre<input name="name" required maxlength="40" value="${esc(v.name)}" ${c ? '' : 'autofocus'}></label>
       </div>
-      <label>Sobre por quincena <small>Deja 0 si no quieres limitarla</small><input name="budget" inputmode="decimal" placeholder="$0" autocomplete="off" value="${v.budget ? (v.budget / 100).toFixed(2) : ''}" ${c ? 'autofocus' : ''}></label>
+      <label>Sobre por quincena <small>Deja 0 si no quieres limitarla</small><input name="budget" inputmode="decimal" placeholder="${esc(localSymbol())}0" autocomplete="off" value="${v.budget ? (v.budget / 100).toFixed(2) : ''}" ${c ? 'autofocus' : ''}></label>
       <label>Tipo (para la regla 50/30/20)<select name="group">${Object.entries(Store.GRUPOS).map(([id, g]) => `<option value="${id}" ${id === v.group ? 'selected' : ''}>${g.label}</option>`).join('')}</select></label>
       <fieldset><legend>Color</legend><div class="swatches">${Store.PALETA.map((col) => `<label class="swatch"><input type="radio" name="color" value="${col}" ${col === v.color ? 'checked' : ''}><span style="background:${col}"></span></label>`).join('')}</div></fieldset>
       <button class="btn primary" type="submit">Guardar</button>
@@ -869,16 +936,27 @@ document.addEventListener('click', (ev) => {
 $sheet.addEventListener('click', (ev) => {
   if (ev.target === $sheet) closeSheet();
 });
+$sheet.addEventListener('input', (ev) => ev.target.matches('[data-amount]') && syncFx());
+$sheet.addEventListener('change', (ev) => ev.target.name === 'cur' && syncFx());
 
 document.addEventListener('change', (ev) => {
   const el = ev.target;
   if (el.matches('[data-toggle-every]')) syncEveryFields();
+  if (el.name === 'currency' && el.closest('form[data-form="onboarding"]')) el.form.elements.netPay.placeholder = `${symbolOf(el.value)}0`;
   if (el.matches('[data-autosave]')) {
     const name = el.name;
     commit((s) => {
-      if (name === 'currency') s.settings.currency = el.value;
+      if (name === 'currency') {
+        s.settings.currency = el.value;
+        // El tipo de cambio de otra moneda no sirve: se precarga el oficial si lo conocemos.
+        s.settings.usdRate = L.DEFAULT_USD_RATE[el.value] ?? null;
+      }
       if (name === 'billBufferDays') s.settings.billBufferDays = Number(el.value);
-    }, { toast: 'Guardado' });
+      if (name === 'usdRate') {
+        const r = Number(String(el.value).replace(',', '.'));
+        s.settings.usdRate = r > 0 ? r : null;
+      }
+    }, { toast: name === 'currency' ? 'Moneda cambiada. Tus montos guardados no se convierten.' : 'Guardado' });
   }
   if (el.matches('[data-action="import-json"]') && el.files && el.files[0]) {
     const file = el.files[0];
@@ -916,17 +994,21 @@ const forms = {
       s.settings.payDays = [Number(f.elements.pay1.value), f.elements.pay2.value === 'last' ? 'last' : Number(f.elements.pay2.value)];
       s.settings.weekendRule = f.elements.weekendRule.value;
       s.settings.savings = { type: 'percent', value: Number(f.elements.savings.value) };
-      s.settings.currency = f.elements.currency.value;
+      if (s.settings.currency !== f.elements.currency.value) {
+        s.settings.currency = f.elements.currency.value;
+        s.settings.usdRate = L.DEFAULT_USD_RATE[f.elements.currency.value] ?? null;
+      }
       s.settings.setupDone = true;
     });
     location.hash = '#/fijos';
     showToast('Listo. Ahora agrega tus gastos fijos.');
   },
   expense: (f) => {
-    const amount = readAmount(f);
-    if (amount == null || amount === 0) return;
+    const m = readMoney(f);
+    if (m == null || m.amount === 0) return;
+    const amount = m.amount;
     const id = f.dataset.id;
-    const data = { amount, categoryId: f.elements.categoryId.value, note: f.elements.note.value.trim(), date: f.elements.date.value || today() };
+    const data = { amount, usd: m.usd, categoryId: f.elements.categoryId.value, note: f.elements.note.value.trim(), date: f.elements.date.value || today() };
     closeSheet();
     commit(
       (s) => {
@@ -937,10 +1019,10 @@ const forms = {
     );
   },
   income: (f) => {
-    const amount = readAmount(f);
-    if (amount == null || amount === 0) return;
+    const m = readMoney(f);
+    if (m == null || m.amount === 0) return;
     const id = f.dataset.id;
-    const data = { amount, note: f.elements.note.value.trim(), date: f.elements.date.value || today() };
+    const data = { amount: m.amount, usd: m.usd, note: f.elements.note.value.trim(), date: f.elements.date.value || today() };
     closeSheet();
     commit(
       (s) => {
@@ -951,13 +1033,14 @@ const forms = {
     );
   },
   bill: (f) => {
-    const amount = readAmount(f);
-    if (amount == null) return;
+    const m = readMoney(f);
+    if (m == null) return;
     const id = f.dataset.id;
     const every = Number(f.elements.every.value);
     const data = {
       name: f.elements.name.value.trim() || 'Gasto fijo',
-      amount,
+      amount: m.amount,
+      usd: m.usd,
       every,
       dueDay: f.elements.dueDay.value === 'last' ? 'last' : Number(f.elements.dueDay.value),
       anchorMonth: Number(f.elements.anchorMonth.value),

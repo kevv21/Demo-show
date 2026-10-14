@@ -33,6 +33,7 @@ Tu cuenta tiene plan Starter con asiento View. Con eso el conector MCP de Figma 
 ## Sistema visual
 
 - **Tipografía:** Manrope (Google Fonts). Números tabulares para que las cifras no "bailen".
+- **Moneda:** córdobas con símbolo C$ (formato es-NI: C$12,500.50). Los dólares siempre como "US$" para no confundirlos.
 - **Color:** verde oscuro como marca (dinero, calma), lima `#C6F36B` solo para la cifra principal "Te queda para gastar". Rojo y ámbar se reservan para estados (excedido, vencido, cerca del límite), nunca para decorar.
 - **Jerarquía de Inicio:** 1) cuánto te queda y cuánto por día, 2) fijos pendientes y vencidos, 3) sobres por categoría con una raya que marca qué tan avanzada va la quincena, 4) últimos gastos.
 - **Captura rápida:** el botón "+ Gasto" siempre visible; la hoja abre con el teclado numérico y la categoría más usada ya seleccionada. Meta: registrar un gasto en menos de 5 segundos.

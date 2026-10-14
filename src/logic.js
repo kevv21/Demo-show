@@ -147,8 +147,45 @@ export function billDueDatesInPeriod(bill, period, settings) {
 }
 
 // Gastos no mensuales con "apartar" activo: se guarda una parte cada quincena (fondo de previsión).
+// ---------- Moneda local y dólares ----------
+
+// Monedas soportadas con el locale de su país, para que el símbolo y los separadores salgan bien (C$1,250.50).
+export const MONEDAS = [
+  { code: 'NIO', name: 'Córdoba nicaragüense', plural: 'córdobas', locale: 'es-NI' },
+  { code: 'USD', name: 'Dólar estadounidense', plural: 'dólares', locale: 'es-US' },
+  { code: 'CRC', name: 'Colón costarricense', plural: 'colones', locale: 'es-CR' },
+  { code: 'HNL', name: 'Lempira hondureño', plural: 'lempiras', locale: 'es-HN' },
+  { code: 'GTQ', name: 'Quetzal guatemalteco', plural: 'quetzales', locale: 'es-GT' },
+  { code: 'MXN', name: 'Peso mexicano', plural: 'pesos', locale: 'es-MX' },
+  { code: 'COP', name: 'Peso colombiano', plural: 'pesos', locale: 'es-CO' },
+  { code: 'DOP', name: 'Peso dominicano', plural: 'pesos', locale: 'es-DO' },
+  { code: 'PEN', name: 'Sol peruano', plural: 'soles', locale: 'es-PE' },
+  { code: 'CLP', name: 'Peso chileno', plural: 'pesos', locale: 'es-CL' },
+  { code: 'ARS', name: 'Peso argentino', plural: 'pesos', locale: 'es-AR' },
+  { code: 'EUR', name: 'Euro', plural: 'euros', locale: 'es-ES' },
+];
+export const DEFAULT_CURRENCY = 'NIO';
+
+// Tipo de cambio oficial de referencia (moneda local por US$1). Solo se precarga para el córdoba;
+// para otras monedas el usuario lo escribe en Ajustes.
+export const DEFAULT_USD_RATE = { NIO: 36.6243 };
+
+// Centavos de dólar a centavos de moneda local.
+export const fromUSD = (usdCents, rate) => Math.round(usdCents * rate);
+
+// Hay montos en dólares solo si la moneda local no es el dólar y hay tipo de cambio.
+export const usesUSD = (settings) => settings.currency !== 'USD';
+
+// Monto en moneda local de un gasto fijo; si se pactó en dólares se convierte con el tipo de cambio actual.
+export function billAmount(bill, settings) {
+  if (bill.usd == null) return bill.amount;
+  if (settings.currency === 'USD') return bill.usd;
+  return fromUSD(bill.usd, settings.usdRate || 0);
+}
+
 export const isSpread = (bill) => bill.every >= 2 && !!bill.spread;
-export const spreadPerPeriod = (bill) => Math.round(bill.amount / (bill.every * 2));
+export const spreadPerPeriod = (bill, settings) =>
+  Math.round((settings ? billAmount(bill, settings) : bill.amount) / (bill.every * 2));
 
 export function billsForPeriod(state, period) {
   const status = (state.billStatus && state.billStatus[period.key]) || {};
@@ -158,24 +195,26 @@ export function billsForPeriod(state, period) {
     const st = status[bill.id];
     if (isSpread(bill)) {
       const dues = billDueDatesInPeriod(bill, period, state.settings);
+      const part = spreadPerPeriod(bill, state.settings);
       rows.push({
         bill,
         kind: 'apartado',
         date: period.start,
-        estimated: spreadPerPeriod(bill),
-        amount: st && st.amount != null ? st.amount : spreadPerPeriod(bill),
+        estimated: part,
+        amount: st && st.amount != null ? st.amount : part,
         paid: !!(st && st.paid),
         dueInPeriod: dues[0] || null,
       });
       continue;
     }
+    const full = billAmount(bill, state.settings);
     for (const date of billDueDatesInPeriod(bill, period, state.settings)) {
       rows.push({
         bill,
         kind: 'pago',
         date,
-        estimated: bill.amount,
-        amount: st && st.amount != null ? st.amount : bill.amount,
+        estimated: full,
+        amount: st && st.amount != null ? st.amount : full,
         paid: !!(st && st.paid),
       });
     }
@@ -300,12 +339,27 @@ export function parseAmount(input) {
   return Math.round(n * 100);
 }
 
-export function makeFormatter(currency = 'MXN') {
-  const fmt2 = new Intl.NumberFormat('es-MX', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmt0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency, maximumFractionDigits: 0 });
+function numberFormat(locale, currency, digits) {
+  const base = { style: 'currency', currency, minimumFractionDigits: digits, maximumFractionDigits: digits };
+  try {
+    return new Intl.NumberFormat(locale, { ...base, currencyDisplay: 'narrowSymbol' });
+  } catch {
+    // Navegadores viejos sin narrowSymbol
+    return new Intl.NumberFormat(locale, base);
+  }
+}
+
+export function makeFormatter(currency = DEFAULT_CURRENCY) {
+  const locale = (MONEDAS.find((m) => m.code === currency) || { locale: 'es' }).locale;
+  const fmt2 = numberFormat(locale, currency, 2);
+  const fmt0 = numberFormat(locale, currency, 0);
+  const usd2 = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const usd0 = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
   return {
     money: (cents) => ((cents || 0) % 100 === 0 ? fmt0 : fmt2).format((cents || 0) / 100),
     round: (cents) => fmt0.format(Math.round((cents || 0) / 100)),
+    // Dólares siempre con "US$" para no confundirlos con el símbolo local.
+    usd: (cents) => `US$${((cents || 0) % 100 === 0 ? usd0 : usd2).format((cents || 0) / 100)}`,
   };
 }
 
@@ -317,10 +371,11 @@ export function toCSV(state) {
     const s = String(v ?? '');
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
+  const usd = (m) => (m.usd != null ? (m.usd / 100).toFixed(2) : '');
   const rows = [];
-  for (const e of state.expenses) rows.push([e.date, 'gasto', catById[e.categoryId] || '', (e.amount / 100).toFixed(2), e.note || '']);
-  for (const i of state.incomes || []) rows.push([i.date, 'ingreso extra', '', (i.amount / 100).toFixed(2), i.note || '']);
+  for (const e of state.expenses) rows.push([e.date, 'gasto', catById[e.categoryId] || '', (e.amount / 100).toFixed(2), usd(e), e.note || '']);
+  for (const i of state.incomes || []) rows.push([i.date, 'ingreso extra', '', (i.amount / 100).toFixed(2), usd(i), i.note || '']);
   rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  rows.unshift(['fecha', 'tipo', 'categoria', 'monto', 'nota']);
+  rows.unshift(['fecha', 'tipo', 'categoria', `monto_${state.settings ? state.settings.currency.toLowerCase() : 'local'}`, 'monto_usd', 'nota']);
   return rows.map((r) => r.map(esc).join(',')).join('\n');
 }

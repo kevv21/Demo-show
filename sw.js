@@ -1,5 +1,5 @@
 // Service worker: la app funciona sin internet después de la primera visita.
-const CACHE = 'quincena-v1';
+const CACHE = 'quincena-v2';
 const SHELL = [
   './',
   './index.html',

@@ -1,8 +1,8 @@
 // Persistencia local (localStorage). Los datos nunca salen del dispositivo salvo que exportes un respaldo.
-import { addDays, parseISO, periodFor, shiftPeriod, todayISO } from './logic.js';
+import { addDays, DEFAULT_CURRENCY, DEFAULT_USD_RATE, fromUSD, MONEDAS, periodFor, shiftPeriod, todayISO } from './logic.js';
 
 const KEY = 'quincena:v1';
-const DEMO_KEY = 'quincena:demo';
+const DEMO_KEY = 'quincena:demo-ni';
 export const SCHEMA_VERSION = 1;
 
 export const uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
@@ -13,7 +13,7 @@ export const GRUPOS = {
   ahorro: { label: 'Ahorro y deudas extra', meta: 20 },
 };
 
-export const PALETA = ['#5B6CF0', '#2E9BC6', '#1F8A5B', '#E08A1E', '#D6478F', '#C0392B', '#E0565B', '#A35BD6', '#7A6FF0', '#8A7A55', '#C08A2E', '#13201A', '#5F6A64'];
+export const PALETA = ['#5B6CF0', '#2E9BC6', '#3F7FBF', '#1F8A5B', '#E08A1E', '#D6478F', '#C0392B', '#E0565B', '#A35BD6', '#7A6FF0', '#8A7A55', '#C08A2E', '#13201A', '#5F6A64'];
 
 export function defaultCategories() {
   return [
@@ -22,8 +22,9 @@ export function defaultCategories() {
     { id: 'super', name: 'Súper y despensa', emoji: '🛒', color: '#1F8A5B', group: 'necesidad', budget: 0 },
     { id: 'transporte', name: 'Transporte', emoji: '🚌', color: '#E08A1E', group: 'necesidad', budget: 0 },
     { id: 'salud', name: 'Salud', emoji: '💊', color: '#D6478F', group: 'necesidad', budget: 0 },
+    { id: 'educacion', name: 'Educación', emoji: '📚', color: '#3F7FBF', group: 'necesidad', budget: 0 },
     { id: 'deudas', name: 'Deudas', emoji: '💳', color: '#C0392B', group: 'necesidad', budget: 0 },
-    { id: 'comida', name: 'Comida fuera', emoji: '🌮', color: '#E0565B', group: 'deseo', budget: 0 },
+    { id: 'comida', name: 'Comida fuera', emoji: '🍽️', color: '#E0565B', group: 'deseo', budget: 0 },
     { id: 'ocio', name: 'Salidas y ocio', emoji: '🎉', color: '#A35BD6', group: 'deseo', budget: 0 },
     { id: 'suscripciones', name: 'Suscripciones', emoji: '📺', color: '#7A6FF0', group: 'deseo', budget: 0 },
     { id: 'hormiga', name: 'Gastos hormiga', emoji: '☕', color: '#8A7A55', group: 'deseo', budget: 0 },
@@ -38,7 +39,8 @@ export function defaultState() {
     version: SCHEMA_VERSION,
     settings: {
       setupDone: false,
-      currency: 'MXN',
+      currency: DEFAULT_CURRENCY,
+      usdRate: DEFAULT_USD_RATE[DEFAULT_CURRENCY],
       netPay: 0,
       payDays: [15, 'last'],
       weekendRule: 'none',
@@ -58,6 +60,8 @@ const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const int = (v, d = 0) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : d);
 const isISO = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const str = (v, max = 80) => String(v ?? '').slice(0, max);
+// Entero opcional no negativo: null si no viene.
+const optCents = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Math.max(0, int(v)));
 
 // Valida y completa cualquier estado (incluido un respaldo importado) para que la app nunca truene.
 export function normalize(raw) {
@@ -65,9 +69,13 @@ export function normalize(raw) {
   if (!isObj(raw)) return base;
   const s = isObj(raw.settings) ? raw.settings : {};
   const payDays = Array.isArray(s.payDays) && s.payDays.length === 2 ? s.payDays : base.settings.payDays;
+  const currency = MONEDAS.some((m) => m.code === s.currency) ? s.currency : DEFAULT_CURRENCY;
+  const rate = Number(s.usdRate);
   const settings = {
     setupDone: !!s.setupDone,
-    currency: /^[A-Z]{3}$/.test(s.currency) ? s.currency : 'MXN',
+    currency,
+    // Moneda local por US$1. null = sin configurar (solo se precarga para el córdoba).
+    usdRate: rate > 0 && rate < 1e6 ? rate : DEFAULT_USD_RATE[currency] ?? null,
     netPay: Math.max(0, int(s.netPay)),
     payDays: payDays.map((d) => (d === 'last' ? 'last' : Math.min(31, Math.max(1, int(d, 15))))),
     weekendRule: s.weekendRule === 'before' ? 'before' : 'none',
@@ -98,6 +106,8 @@ export function normalize(raw) {
     spread: !!b.spread,
     categoryId: catIds.has(b.categoryId) ? b.categoryId : 'otros',
     active: b.active !== false,
+    // Monto pactado en dólares (centavos de US$); si existe, el monto local se calcula con el tipo de cambio.
+    usd: optCents(b.usd),
   }));
   const moves = (list, withCat) =>
     (Array.isArray(list) ? list : [])
@@ -107,6 +117,8 @@ export function normalize(raw) {
         amount: Math.max(0, int(e.amount)),
         date: e.date,
         note: str(e.note, 80),
+        // Si se registró en dólares: monto original en centavos de US$ (el monto local ya viene convertido).
+        usd: optCents(e.usd),
         ...(withCat ? { categoryId: catIds.has(e.categoryId) ? e.categoryId : 'otros' } : {}),
         createdAt: int(e.createdAt, Date.now()),
       }));
@@ -160,27 +172,31 @@ export function clearAll(demo) {
 }
 
 // Datos de ejemplo relativos a hoy, para probar la app sin capturar nada.
+// Hogar urbano en Managua: montos en córdobas; alquiler, streaming y una remesa en dólares.
 export function demoState(today = todayISO()) {
   const st = defaultState();
-  st.settings = { ...st.settings, setupDone: true, netPay: 1200000, savings: { type: 'percent', value: 10 } };
-  const budgets = { super: 180000, transporte: 70000, comida: 60000, ocio: 50000, hormiga: 30000, personal: 30000, salud: 20000 };
+  const rate = st.settings.usdRate || DEFAULT_USD_RATE.NIO;
+  st.settings = { ...st.settings, setupDone: true, netPay: 1250000, savings: { type: 'percent', value: 10 } };
+  const budgets = { super: 300000, transporte: 90000, comida: 70000, ocio: 60000, hormiga: 40000, personal: 40000, salud: 30000 };
   st.categories = st.categories.map((c) => ({ ...c, budget: budgets[c.id] || 0 }));
-  const { m } = parseISO(today);
+  const bill = (id, name, amount, dueDay, categoryId, extra = {}) => ({
+    id, name, amount, dueDay, every: 1, anchorMonth: 1, spread: false, categoryId, active: true, usd: null, ...extra,
+  });
   st.bills = [
-    { id: 'renta', name: 'Renta', amount: 650000, dueDay: 1, every: 1, anchorMonth: 1, spread: false, categoryId: 'vivienda', active: true },
-    { id: 'luz', name: 'Luz (CFE)', amount: 90000, dueDay: 20, every: 2, anchorMonth: ((m - 1) % 2) + 1, spread: false, categoryId: 'servicios', active: true },
-    { id: 'internet', name: 'Internet', amount: 54900, dueDay: 10, every: 1, anchorMonth: 1, spread: false, categoryId: 'servicios', active: true },
-    { id: 'cel', name: 'Celular', amount: 29900, dueDay: 22, every: 1, anchorMonth: 1, spread: false, categoryId: 'servicios', active: true },
-    { id: 'gas', name: 'Gas', amount: 45000, dueDay: 25, every: 1, anchorMonth: 1, spread: false, categoryId: 'servicios', active: true },
-    { id: 'stream', name: 'Streaming', amount: 21900, dueDay: 18, every: 1, anchorMonth: 1, spread: false, categoryId: 'suscripciones', active: true },
-    { id: 'seguro', name: 'Seguro del auto', amount: 960000, dueDay: 15, every: 12, anchorMonth: 3, spread: true, categoryId: 'transporte', active: true },
+    bill('alquiler', 'Alquiler', fromUSD(25000, rate), 1, 'vivienda', { usd: 25000 }),
+    bill('luz', 'Luz', 120000, 20, 'servicios'),
+    bill('agua', 'Agua', 35000, 18, 'servicios'),
+    bill('internet', 'Internet y cable', 140000, 10, 'servicios'),
+    bill('cel', 'Plan de celular', 55000, 22, 'servicios'),
+    bill('stream', 'Streaming', fromUSD(999, rate), 18, 'suscripciones', { usd: 999 }),
+    bill('matricula', 'Matrícula escolar', 600000, 15, 'educacion', { every: 12, anchorMonth: 1, spread: true }),
   ];
   const cur = periodFor(today, st.settings);
   const plan = [
-    ['super', 'Súper semanal', 92000, 0], ['hormiga', 'Café', 6500, 0], ['transporte', 'Gasolina', 50000, 1],
-    ['comida', 'Tacos', 18000, 1], ['hormiga', 'Oxxo', 4500, 2], ['ocio', 'Cine', 26000, 3],
-    ['super', 'Mercado', 31000, 4], ['hormiga', 'Café', 6500, 4], ['comida', 'Comida del trabajo', 15000, 5],
-    ['personal', 'Corte de cabello', 18000, 6], ['salud', 'Farmacia', 12000, 7], ['transporte', 'Uber', 9800, 7],
+    ['super', 'Súper de la semana', 145000, 0], ['hormiga', 'Café', 6000, 0], ['transporte', 'Gasolina (moto)', 60000, 1],
+    ['comida', 'Fritanga', 18000, 1], ['hormiga', 'Pulpería', 7500, 2], ['ocio', 'Cine', 30000, 3],
+    ['super', 'Mercado', 52000, 4], ['hormiga', 'Café', 6000, 4], ['comida', 'Almuerzo del trabajo', 15000, 5],
+    ['personal', 'Barbería', 15000, 6], ['salud', 'Farmacia', 38000, 7], ['transporte', 'Taxi', 12000, 7],
   ];
   const expenses = [];
   for (let back = 0; back < 6; back++) {
@@ -189,13 +205,13 @@ export function demoState(today = todayISO()) {
       const date = addDays(p.start, offset + (back % 2));
       if (date > today || date > p.end) return;
       const wiggle = 1 + (((i * 7 + back * 13) % 9) - 4) / 20;
-      expenses.push({ id: uid(), categoryId, note, amount: Math.round((amount * wiggle) / 100) * 100, date, createdAt: Date.now() });
+      expenses.push({ id: uid(), categoryId, note, amount: Math.round((amount * wiggle) / 100) * 100, usd: null, date, createdAt: Date.now() });
     });
     // Quincenas pasadas: fijos marcados como pagados.
     if (back > 0) st.billStatus[p.key] = Object.fromEntries(st.bills.map((b) => [b.id, { paid: true }]));
   }
-  st.billStatus[cur.key] = { renta: { paid: true } };
+  st.billStatus[cur.key] = { alquiler: { paid: true } };
   st.expenses = expenses;
-  st.incomes = [{ id: uid(), amount: 150000, note: 'Venta en línea', date: cur.start, createdAt: Date.now() }];
+  st.incomes = [{ id: uid(), amount: fromUSD(10000, rate), usd: 10000, note: 'Remesa', date: cur.start, createdAt: Date.now() }];
   return st;
 }

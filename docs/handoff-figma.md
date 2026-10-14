@@ -6,6 +6,7 @@ Documento para continuar en una sesión de Claude Desktop (en la computadora del
 
 - El usuario pidió una app para llevar sus finanzas con **salario quincenal**, registrando y especificando sus gastos, diseñada en Figma y basada en apps de referencia y comunidades (Reddit, foros).
 - **Ya está hecha la app** (web instalable, sin dependencias) en el repo `kevv21/Demo-show`, rama `claude/inspiring-volta-0stml8`. No hay PR abierto.
+- El usuario es de **Nicaragua**: la app trabaja en córdobas (C$) y acepta montos en dólares (US$) con tipo de cambio. Los diseños deben mostrar montos en C$ (por ejemplo "C$12,500") y, donde aplique, el equivalente "US$250".
 - **Falta el diseño en Figma.** El conector MCP de Figma se bloqueó: la cuenta tiene plan **Starter con asiento View** y ese plan permite **20 llamadas MCP al mes**, ya agotadas el 14 oct 2026. Ese límite es de la cuenta de Figma, así que también aplica en Desktop.
 - Archivo de Figma ya creado (vacío, una página "Page 1"): https://www.figma.com/design/KFgbavtd7Wv6QRieTEu03K (fileKey `KFgbavtd7Wv6QRieTEu03K`, plan `team::1673967276440825674`).
 
@@ -41,12 +42,12 @@ Criterio de terminado: las pantallas se ven como las capturas de `design/screens
 
 **Colores modo claro:** fondo `#F4F5F0`, superficie `#FFFFFF`, hundido `#ECEEE7`, texto `#13201A`, texto secundario `#5F6A64`, borde `#E1E4DC`, marca `#1D6A50`, marca suave `#E1EFE8`, acento lima `#C6F36B` (solo la cifra principal), héroe `#13201A`, ok `#1F8A5B`, alerta `#B86E0B` / `#FBEFD9`, peligro `#C0392B` / `#FBE4E0`, info suave `#E6EEFB`.
 **Modo oscuro:** fondo `#0E1512`, superficie `#16201B`, hundido `#1D2923`, texto `#EEF2EC`, secundario `#9AA59F`, borde `#26332C`, marca `#5CC79A`, héroe `#1C2B23`.
-**Categorías:** vivienda `#5B6CF0`, servicios `#2E9BC6`, súper `#1F8A5B`, transporte `#E08A1E`, salud `#D6478F`, deudas `#C0392B`, comida `#E0565B`, ocio `#A35BD6`, suscripciones `#7A6FF0`, hormiga `#8A7A55`, personal `#C08A2E`, metas `#13201A`, otros `#5F6A64`. El fondo del ícono de categoría es su color al 16% sobre la superficie.
+**Categorías:** vivienda `#5B6CF0`, servicios `#2E9BC6`, educación `#3F7FBF`, súper `#1F8A5B`, transporte `#E08A1E`, salud `#D6478F`, deudas `#C0392B`, comida `#E0565B`, ocio `#A35BD6`, suscripciones `#7A6FF0`, hormiga `#8A7A55`, personal `#C08A2E`, metas `#13201A`, otros `#5F6A64`. El fondo del ícono de categoría es su color al 16% sobre la superficie.
 **Tipografía (Manrope):** monto héroe 48/800, título 26/800, título de tarjeta 17/800, cuerpo 16/500, secundario 13/500, etiqueta 11/600. Números tabulares.
 **Forma:** tarjetas con radio 20 y borde de 1 px; héroe con radio 24; controles con radio 12; botones con radio 14 y 48 de alto; chips como píldora. Margen lateral de 16, separación entre tarjetas de 14.
 
 **Inicio, de arriba abajo:** selector de quincena ("Quincena del 30 sep", "30 sep al 14 oct · actual", flechas circulares de 44); tarjeta héroe oscura ("TE QUEDA PARA GASTAR", monto en lima, "Unos $X por día · N días restantes", línea de avance, fila Ingreso | Fijos | Ahorro | Gastado); alertas; tarjeta "Fijos de esta quincena" (círculo para marcar, nombre, "Vence ...", monto en píldora gris; el vencido va en rojo); tarjeta "Sobres" en cuadrícula de 2 (emoji, nombre, restante grande, "de $X", barra con raya del día de hoy); "Últimos gastos". Botón flotante "+ Gasto" verde y barra de 5 pestañas (Inicio, Gastos, Fijos, Reportes, Ajustes).
-**Nuevo gasto:** hoja inferior con radio superior de 24, título, monto grande centrado de 40/800, cuadrícula de categorías de 4 columnas (emoji y nombre), nota, fecha y botón "Guardar gasto".
+**Nuevo gasto:** hoja inferior con radio superior de 24, título, selector segmentado "C$ córdobas | US$ dólares", monto grande centrado de 40/800 con la conversión debajo en verde, cuadrícula de categorías de 4 columnas (emoji y nombre), nota, fecha y botón "Guardar gasto".
 
 Fuente de verdad: las capturas de `design/screens/` y `src/styles.css`.
 
