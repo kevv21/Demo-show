@@ -25,6 +25,8 @@ const billLocal = (bill) => L.billAmount(bill, state.settings);
 const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const today = () => L.todayISO();
 const catById = (id) => state.categories.find((c) => c.id === id) || state.categories.find((c) => c.id === 'otros');
+// El color #13201A (Metas) es la tinta del modo claro; en oscuro casi no se ve, así que se pinta con la tinta del tema.
+const catColor = (color) => (/^#13201a$/i.test(color) ? 'var(--ink)' : color);
 const DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const dayLabel = (iso) => {
   if (iso === today()) return 'Hoy';
@@ -133,7 +135,7 @@ function bar(value, max, { color, marker, plain } = {}) {
 function expenseRow(e) {
   const c = catById(e.categoryId);
   return `<button class="row" data-action="edit-expense" data-id="${esc(e.id)}">
-    <span class="emoji" style="--c:${c.color}">${esc(c.emoji)}</span>
+    <span class="emoji" style="--c:${catColor(c.color)}">${esc(c.emoji)}</span>
     <span class="row-main"><span class="row-title">${esc(e.note || c.name)}</span><span class="row-sub">${esc(e.note ? c.name : dayLabel(e.date))}${e.usd != null ? ` · ${usd(e.usd)}` : ''}</span></span>
     <span class="row-amount">−${money(e.amount)}</span>
   </button>`;
@@ -292,10 +294,10 @@ function viewInicio() {
       ${s.envelopes
         .map(
           (e) => `<button class="envelope" data-action="filter-cat" data-id="${esc(e.cat.id)}">
-          <div class="env-top"><span class="emoji sm" style="--c:${e.cat.color}">${esc(e.cat.emoji)}</span><span class="env-name">${esc(e.cat.name)}</span></div>
+          <div class="env-top"><span class="emoji sm" style="--c:${catColor(e.cat.color)}">${esc(e.cat.emoji)}</span><span class="env-name">${esc(e.cat.name)}</span></div>
           <div class="env-amount ${e.remaining < 0 ? 'neg' : ''}">${e.budget ? (e.remaining < 0 ? `−${round(-e.remaining)}` : round(e.remaining)) : round(e.spent)}</div>
           <div class="env-sub">${e.budget ? (e.remaining < 0 ? 'excedido' : `de ${round(e.budget)}`) : 'sin sobre'}</div>
-          ${bar(e.spent, e.budget, { color: e.cat.color, marker: isCurrent && e.budget ? s.elapsed : null })}
+          ${bar(e.spent, e.budget, { color: catColor(e.cat.color), marker: isCurrent && e.budget ? s.elapsed : null })}
         </button>`,
         )
         .join('')}
@@ -396,7 +398,7 @@ function viewFijos() {
               .map((b) => {
                 const c = catById(b.categoryId);
                 return `<button class="row" data-action="edit-bill" data-id="${esc(b.id)}">
-            <span class="emoji" style="--c:${c.color}">${esc(c.emoji)}</span>
+            <span class="emoji" style="--c:${catColor(c.color)}">${esc(c.emoji)}</span>
             <span class="row-main"><span class="row-title">${esc(b.name)}${b.active ? '' : ' <em class="tag">pausado</em>'}</span>
               <span class="row-sub">${esc(L.frecuenciaLabel(b.every))}${b.every === 0 ? '' : ` · vence ${esc(dueLabel(b.dueDay))}`}${b.usd != null ? ` · ${usd(b.usd)}` : ''}</span>
               <span class="row-sub accent">${esc(which(b))}</span></span>
@@ -469,8 +471,8 @@ function viewReportes() {
           ? cats
               .map(
                 (x) => `<div class="cat-row">
-          <span class="emoji sm" style="--c:${x.c.color}">${esc(x.c.emoji)}</span>
-          <div class="cat-main"><div class="load-label"><span>${esc(x.c.name)}</span><strong>${money(x.v)}</strong></div>${bar(x.v, maxCat, { color: x.c.color, plain: true })}</div>
+          <span class="emoji sm" style="--c:${catColor(x.c.color)}">${esc(x.c.emoji)}</span>
+          <div class="cat-main"><div class="load-label"><span>${esc(x.c.name)}</span><strong>${money(x.v)}</strong></div>${bar(x.v, maxCat, { color: catColor(x.c.color), plain: true })}</div>
         </div>`,
               )
               .join('')
@@ -542,7 +544,7 @@ function viewAjustes() {
       ${state.categories
         .map(
           (c) => `<button class="row" data-action="edit-cat" data-id="${esc(c.id)}">
-        <span class="emoji" style="--c:${c.color}">${esc(c.emoji)}</span>
+        <span class="emoji" style="--c:${catColor(c.color)}">${esc(c.emoji)}</span>
         <span class="row-main"><span class="row-title">${esc(c.name)}</span><span class="row-sub">${esc(Store.GRUPOS[c.group].label)}</span></span>
         <span class="row-amount ${c.budget ? '' : 'muted'}">${c.budget ? money(c.budget) : 'sin sobre'}</span>
       </button>`,
@@ -666,7 +668,7 @@ function sheetExpense(e) {
       <fieldset><legend class="sr-only">Categoría</legend>
         <div class="cat-grid">${cats
           .map(
-            (c) => `<label class="cat-pick"><input type="radio" name="categoryId" value="${esc(c.id)}" ${c.id === sel ? 'checked' : ''}><span style="--c:${c.color}"><b>${esc(c.emoji)}</b>${esc(c.name)}</span></label>`,
+            (c) => `<label class="cat-pick"><input type="radio" name="categoryId" value="${esc(c.id)}" ${c.id === sel ? 'checked' : ''}><span style="--c:${catColor(c.color)}"><b>${esc(c.emoji)}</b>${esc(c.name)}</span></label>`,
           )
           .join('')}</div>
       </fieldset>
@@ -744,7 +746,7 @@ function sheetCategory(c) {
       </div>
       <label>Sobre por quincena <small>Deja 0 si no quieres limitarla</small><input name="budget" inputmode="decimal" placeholder="${esc(localSymbol())}0" autocomplete="off" value="${v.budget ? (v.budget / 100).toFixed(2) : ''}" ${c ? 'autofocus' : ''}></label>
       <label>Tipo (para la regla 50/30/20)<select name="group">${Object.entries(Store.GRUPOS).map(([id, g]) => `<option value="${id}" ${id === v.group ? 'selected' : ''}>${g.label}</option>`).join('')}</select></label>
-      <fieldset><legend>Color</legend><div class="swatches">${Store.PALETA.map((col) => `<label class="swatch"><input type="radio" name="color" value="${col}" ${col === v.color ? 'checked' : ''}><span style="background:${col}"></span></label>`).join('')}</div></fieldset>
+      <fieldset><legend>Color</legend><div class="swatches">${Store.PALETA.map((col) => `<label class="swatch"><input type="radio" name="color" value="${col}" ${col === v.color ? 'checked' : ''}><span style="background:${catColor(col)}"></span></label>`).join('')}</div></fieldset>
       <button class="btn primary" type="submit">Guardar</button>
       ${c && c.id !== 'otros' ? `<button class="btn danger ghost" type="button" data-action="delete-cat" data-id="${esc(c.id)}">Eliminar (sus gastos pasan a "Otros")</button>` : ''}
     </form>`);

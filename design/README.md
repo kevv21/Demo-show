@@ -9,7 +9,7 @@ Aquí está todo lo necesario para llevar el diseño a Figma sin depender del co
 | `tokens.json` | Colores (modo claro y oscuro), colores por categoría, radios, espacios y tipografía. Formato W3C DTCG. |
 | `screens/*.png` | Capturas a 390 × 844 (iPhone 14) en resolución 2x de cada pantalla, en claro y oscuro. |
 
-Archivo de Figma ya creado (vacío por ahora): https://www.figma.com/design/KFgbavtd7Wv6QRieTEu03K
+Archivo de Figma (terminado el 2026-10-13: Fundamentos, Pantallas en claro y oscuro, y Componentes): https://www.figma.com/design/KFgbavtd7Wv6QRieTEu03K
 
 ## Por qué no se dibujó directo en Figma
 
