@@ -1,0 +1,12 @@
+{
+  "name": "quincena",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App para llevar tus finanzas por quincena: salario, gastos fijos, sobres por categoría y ahorro.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "npx --yes http-server . -p 8080 -c-1"
+  },
+  "license": "MIT"
+}
